@@ -1,11 +1,10 @@
 # CloseWRT-CI
-云编译CloseWRT固件
+云编译小米WR30U OpenWrt固件
+
+本项目由VIKINGYFY/CloseWRT-CI修改，个人自用，感谢原作者奉献！
 
 PADAVANONLY-24.10源码：
 https://github.com/padavanonly/immortalwrt-mt798x-24.10.git
-
-NEKOKECORE-24.10源码：
-https://github.com/NekokeCore/immortalwrt-mt798x-24.10.git
 
 # 注意：
 
