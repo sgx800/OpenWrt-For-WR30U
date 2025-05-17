@@ -3,9 +3,9 @@ name: CWRT-ALL
 
 #CI计划
 on:
-  #自动编译：每天早上6点
+  #自动编译：每周6早上6点
   schedule:
-    - cron: 0 16 * * *
+    - cron: 0 9 * * 6
   #手动编译
   workflow_dispatch:
     inputs:
