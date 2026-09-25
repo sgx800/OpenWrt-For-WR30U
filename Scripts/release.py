@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 from pathlib import Path
 import recipe
 import sources
@@ -35,6 +36,19 @@ def api(path: str):
 def pages(path: str, key: str = '') -> list:
     result = json.loads(gh('api', '--paginate', '--slurp', path))
     return [item for page in result for item in (page[key] if key else page)]
+
+
+def wait_release(base: str, tag: str, draft: bool | None = None, attempts: int = 15) -> dict:
+    """Wait for GitHub's release listing to reflect create/edit operations."""
+    for attempt in range(attempts):
+        found = next((r for r in pages(f'{base}/releases?per_page=100')
+                      if r['tag_name'] == tag and (draft is None or r['draft'] == draft)), None)
+        if found is not None:
+            return found
+        if attempt + 1 < attempts:
+            time.sleep(1)
+    state = 'any state' if draft is None else ('draft' if draft else 'published')
+    raise RuntimeError(f'Release {tag} did not become visible as {state} after {attempts} attempts')
 
 
 def numeric(value: str) -> str:
@@ -224,7 +238,7 @@ def publish(run_id: str, repository: str, work: Path) -> str:
         gh('release', 'create', tag, '--repo', repository, '--target', m['recipe_commit'],
            '--title', 'WR30U - ' + title_time.strftime('%Y-%m-%d %H:%M +08:00'),
            '--notes-file', str(notes), '--draft')
-        existing = next(r for r in pages(f'{base}/releases?per_page=100') if r['tag_name'] == tag)
+        existing = wait_release(base, tag, draft=True)
     # Draft creation need not create a tag yet. Check an existing ref, but do not
     # confuse an unpublished tag with a failed source/permission verification.
     refs = api(f'{base}/git/matching-refs/tags/{tag}')
@@ -236,12 +250,10 @@ def publish(run_id: str, repository: str, work: Path) -> str:
             raise ValueError('Draft release targets a different recipe commit')
         gh('release', 'upload', tag, '--repo', repository, '--clobber',
            *(str(p) for p in sorted(bundle.iterdir())))
-        draft = next(r for r in pages(f'{base}/releases?per_page=100') if r['tag_name'] == tag)
+        draft = wait_release(base, tag, draft=True)
         verify_remote(draft, bundle)
         gh('release', 'edit', tag, '--repo', repository, '--draft=false', '--latest')
-    published = api(f'{base}/releases/tags/{tag}')
-    if published['draft']:
-        raise ValueError('Release is still a draft; not pruning history')
+    published = wait_release(base, tag, draft=False)
     if api(f'{base}/commits/{tag}')['sha'] != m['recipe_commit']:
         raise ValueError('Published release tag differs from build commit; not pruning history')
     verify_remote(published, bundle)
