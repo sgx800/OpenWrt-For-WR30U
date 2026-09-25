@@ -24,7 +24,7 @@ defaults:
 
 concurrency:
   group: wr30u-native-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   SOURCE_REPO: https://github.com/padavanonly/immortalwrt-mt798x-6.6.git
