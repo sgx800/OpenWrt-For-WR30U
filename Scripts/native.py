@@ -36,9 +36,16 @@ def apps(policy: dict[str, str]) -> set[str]:
     return selected
 
 
+def is_luci_package(name: str) -> bool:
+    # Kconfig sub-options such as luci-app-passwall_INCLUDE_Xray are not
+    # installable packages. Real LuCI package names use lowercase package
+    # characters; Kconfig sub-option suffixes contain underscores/uppercase.
+    return bool(re.fullmatch(r'luci-(?:app|theme)-[a-z0-9][a-z0-9.+-]*', name))
+
+
 def check_apps(packages: set[str], selected: set[str]) -> None:
     missing = selected - packages
-    extra = {p for p in packages if p.startswith(('luci-app-', 'luci-theme-'))}
+    extra = {p for p in packages if is_luci_package(p)}
     extra -= selected | INFRA
     if missing or extra:
         raise ValueError(f'Application mismatch: missing={sorted(missing)}, extra={sorted(extra)}')
