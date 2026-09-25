@@ -38,6 +38,11 @@ class NativeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.check_config(self.config, self.policy)
 
+    def test_luci_package_suboptions_are_not_apps(self):
+        self.config['CONFIG_PACKAGE_luci-app-passwall_INCLUDE_Xray'] = 'y'
+        self.config['CONFIG_PACKAGE_luci-app-rclone_INCLUDE_rclone-webui'] = 'y'
+        native.check_config(self.config, self.policy)
+
     def test_wrong_driver(self):
         self.config['CONFIG_PACKAGE_kmod-mt_wifi7'] = 'y'
         with self.assertRaises(ValueError):
