@@ -1,0 +1,19 @@
+{
+  "firmware": {
+    "repository": "padavanonly/immortalwrt-mt798x-6.6",
+    "branch": "openwrt-24.10-6.6",
+    "reviewed_commit": "ec9ef10efc65da1e6d1de4e2c043c0e13d08eed8"
+  },
+  "configuration_reference": {
+    "repository": "Yuzhii0718/CloseWRT-CI-VIKINGYFY",
+    "commit": "e9b9f9cd5ce0bd828ee9343666ee93298e635cd4",
+    "files": ["Config/GENERAL.txt", "Config/MT7981.txt"]
+  },
+  "extra_packages": [
+    {"name":"luci-theme-aurora", "repository":"eamonxg/luci-theme-aurora", "ref":"master", "path":"."},
+    {"name":"luci-app-aurora-config", "repository":"eamonxg/luci-app-aurora-config", "ref":"master", "path":"."},
+    {"name":"luci-app-tailscale", "repository":"asvow/luci-app-tailscale", "ref":"main", "path":"."},
+    {"name":"luci-app-wechatpush", "repository":"tty228/luci-app-wechatpush", "ref":"master", "path":"."},
+    {"name":"luci-app-wolplus", "repository":"VIKINGYFY/packages", "ref":"e5b318ee58b0a81ce9c59158adabadf4b1f575dd", "path":"luci-app-wolplus"}
+  ]
+}
