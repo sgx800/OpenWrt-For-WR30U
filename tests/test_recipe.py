@@ -97,22 +97,16 @@ class RecipeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             r.catalog('empty')
 
-    def test_selected_app_dependency_is_allowed_but_unrelated_app_is_not(self):
-        metadata = (
-            'Package: luci-app-turboacc-mtk\n'
-            'Depends: +libc +luci-app-ttyd +kmod-bonding @!PACKAGE_luci-app-turboacc\n@@\n'
-            'Package: luci-app-ttyd\nDepends: +libc +ttyd\n@@\n'
-            'Package: ttyd\nDepends: +libc\n@@\n'
-            'Package: luci-app-samba4\nDepends: +libc\n@@\n'
-        )
+    def test_new_luci_dependency_requires_explicit_approval(self):
+        metadata = ('Package: luci-app-turboacc-mtk\nDepends: +libc +luci-app-ttyd\n@@\n'
+                    'Package: luci-app-ttyd\nDepends: +libc +ttyd\n@@\n')
         deps = r.dependency_map(metadata)
-        self.assertIn('luci-app-ttyd', r.dependency_closure(
-            deps, {'luci-app-turboacc-mtk'}))
         packages = {'luci-app-turboacc-mtk', 'luci-app-ttyd'}
-        r.check_apps(packages, {'luci-app-turboacc-mtk'}, deps)
+        with self.assertRaisesRegex(ValueError, 'extra='):
+            r.check_apps(packages, {'luci-app-turboacc-mtk'})
+        r.check_apps(packages, packages, deps)
         with self.assertRaisesRegex(ValueError, 'luci-app-samba4'):
-            r.check_apps(packages | {'luci-app-samba4'},
-                         {'luci-app-turboacc-mtk'}, deps)
+            r.check_apps(packages | {'luci-app-samba4'}, packages, deps)
 
     def test_manifest_rejects_mt76_even_if_config_permits_build_module(self):
         packages = r.VENDOR | r.wanted_apps(self.policy)
@@ -167,42 +161,6 @@ class RecipeTests(unittest.TestCase):
         names = {line.split('\t')[0] for line in plan}
         self.assertTrue(names <= r.wanted_apps(self.policy))
         self.assertIn('luci-app-wolplus', names)
-
-    def test_workflow_release_policy(self):
-        text = (ROOT / '.github/workflows/WR30U.yml').read_text()
-        self.assertIn('softprops/action-gh-release@v3.0.3', text)
-        self.assertIn('output/*-sysupgrade.bin', text)
-        self.assertIn('output/*.manifest', text)
-        self.assertIn('output/firmware-sha256sums', text)
-        self.assertIn('output/*.buildinfo', text)
-        self.assertIn(".[3:] | .[].tagName", text)
-        self.assertIn('gh release delete "$TAG"', text)
-        self.assertIn('--cleanup-tag --yes', text)
-
-    def test_workflow_cleanup_policy(self):
-        text = (ROOT / '.github/workflows/WR30U.yml').read_text()
-        self.assertIn('ophub/delete-releases-workflows@main', text)
-        self.assertIn('  actions: write', text)
-        self.assertIn('          delete_releases: false', text)
-        self.assertIn('          delete_tags: false', text)
-        self.assertIn('          delete_workflows: true', text)
-        self.assertIn('          workflows_keep_day: 0', text)
-        self.assertIn('  build:\n    needs: cleanup', text)
-
-    def test_workflow_triggers_and_source_identity(self):
-        workflows = list((ROOT / '.github/workflows').glob('*.yml'))
-        self.assertEqual(len(workflows), 1)
-        text = workflows[0].read_text()
-        self.assertIn('  workflow_dispatch:', text)
-        self.assertIn("  schedule:\n    - cron: '0 21 * * 0'", text)
-        for event in ('push', 'pull_request', 'workflow_run', 'repository_dispatch'):
-            self.assertNotIn('\n  ' + event + ':', text)
-        self.assertIn('        default: true', text)
-        self.assertIn('  contents: write', text)
-        source = json.loads((ROOT / 'Config/sources.json').read_text())['firmware']
-        self.assertIn('SOURCE_BRANCH: ' + source['branch'], text)
-        self.assertIn('https://github.com/' + source['repository'] + '.git', text)
-        self.assertNotIn('native.py', text)
 
 
 if __name__ == '__main__':

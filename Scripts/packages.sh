@@ -10,7 +10,7 @@ trap 'rm -rf -- "$STAGE"' EXIT
 mkdir -p "$RECIPE/output"
 LOG="$RECIPE/output/extra-package-sources.txt"
 : > "$LOG"
-python3 "$RECIPE/Scripts/recipe.py" plan "$ROOT" > "$STAGE/plan.tsv"
+python3 "$RECIPE/Scripts/sources.py" plan "$ROOT" > "$STAGE/plan.tsv"
 for app in homeproxy autoreboot upnp; do
   [[ -f "$ROOT/feeds/luci/applications/luci-app-$app/Makefile" ]] || {
     echo "Required matching-feed package missing: luci-app-$app" >&2; exit 1;

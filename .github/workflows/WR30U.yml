@@ -1,69 +1,93 @@
 name: WR30U
-run-name: WR30U - ${{ inputs.TEST && 'configuration only' || 'full firmware' }}
+run-name: WR30U - ${{ inputs.MODE == 'publish' && 'publish existing artifact' || (inputs.TEST && 'configuration only' || 'full firmware') }}
 
-# Weekly scheduled build: Monday 05:00 Asia/Shanghai (Sunday 21:00 UTC).
 on:
   schedule:
+    # Monday 05:00 Asia/Shanghai = Sunday 21:00 UTC.
     - cron: '0 21 * * 0'
   workflow_dispatch:
     inputs:
-      TEST:
-        description: 'Only resolve and verify configuration (leave checked unless explicitly building firmware)'
-        type: boolean
+      MODE:
+        description: 'build: compile/check; publish: release an existing successful build (no compilation or run cleanup)'
+        type: choice
+        options: [build, publish]
+        default: build
         required: true
+      TEST:
+        description: 'Configuration only in build mode. Uncheck for full firmware; ignored in publish mode.'
+        type: boolean
         default: true
+        required: true
+      PUBLISH_RUN_ID:
+        description: 'Required for publish mode: original run containing a successful build and wr30u-release artifact'
+        type: string
+        default: ''
+      SOURCE_LOCK_TAG:
+        description: 'Optional build replay: Release tag containing sources.lock.json; leave empty for current source branches'
+        type: string
+        default: ''
 
 permissions:
-  actions: write
-  contents: write
+  contents: read
 
 defaults:
   run:
     shell: bash
 
+# Prevent cleanup from racing another build or a publish-only retry.
 concurrency:
-  group: wr30u-vendor
+  group: wr30u
   cancel-in-progress: false
 
 env:
-  SOURCE_REPO: https://github.com/padavanonly/immortalwrt-mt798x-6.6.git
-  SOURCE_BRANCH: openwrt-24.10-6.6
   CCACHE_MAXSIZE: 1G
   PYTHONDONTWRITEBYTECODE: '1'
 
 jobs:
   cleanup:
-    runs-on: ubuntu-latest
+    if: ${{ inputs.MODE != 'publish' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
     steps:
-      - name: Delete historical Workflow Runs
-        uses: ophub/delete-releases-workflows@main
+      - name: Validate build request
+        env:
+          MODE: ${{ inputs.MODE || 'build' }}
+        run: test "$MODE" = build
+      - name: Delete completed historical Workflow Runs
+        uses: ophub/delete-releases-workflows@9c4138644d440d66f145e5ab03a98f03b5cbf2b0
         with:
-          gh_token: ${{ secrets.GITHUB_TOKEN }}
+          gh_token: ${{ github.token }}
           delete_releases: false
           delete_tags: false
           delete_workflows: true
           workflows_keep_day: 0
 
   build:
+    name: build
     needs: cleanup
+    if: ${{ inputs.MODE != 'publish' }}
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.TEST && 30 || 360 }}
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Static checks
+      - name: Local policy and regression tests
         run: |
           mkdir -p output logs
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends python3-yaml
           bash -n Scripts/packages.sh
-          python3 -m unittest discover -s tests -v 2>&1 | tee logs/static.log
+          /usr/bin/python3 -m unittest discover -s tests -v 2>&1 | tee logs/static.log
       - name: Install build prerequisites
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          # Only unused SDKs on this disposable GitHub-hosted runner.
           sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup
-          sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
             gettext git libncurses-dev libssl-dev python3 python3-setuptools \
@@ -75,140 +99,107 @@ jobs:
             libgnutls28-dev autopoint intltool lld llvm libltdl-dev
           sudo apt-get clean
           FREE_KB=$(df -Pk . | awk 'NR==2 {print $4}')
-          if [ "$FREE_KB" -lt 26214400 ]; then
-            echo "At least 25 GiB free space required; available: $FREE_KB KiB" >&2
-            exit 1
-          fi
+          test "$FREE_KB" -ge 26214400 || { echo 'At least 25 GiB free space required' >&2; exit 1; }
+          { uname -a; python3 --version; git --version; dpkg-query -W; } > output/environment.txt
           df -h
-      - name: Fetch padavanonly source and verify Vendor backend
+      - name: Load optional source lock from Release
+        if: ${{ inputs.SOURCE_LOCK_TAG != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LOCK_TAG: ${{ inputs.SOURCE_LOCK_TAG }}
         run: |
-          git clone --depth=1 --single-branch --branch "$SOURCE_BRANCH" "$SOURCE_REPO" wrt
-          echo "SOURCE_SHA=$(git -C wrt rev-parse HEAD)" >> "$GITHUB_ENV"
-          {
-            printf 'recipe_commit=%s\n' "$(git rev-parse HEAD)"
-            printf 'source_repo=%s\nsource_branch=%s\nsource_commit=%s\n' \
-              "$SOURCE_REPO" "$SOURCE_BRANCH" "$(git -C wrt rev-parse HEAD)"
-          } > output/source-lock.txt
-          python3 Scripts/recipe.py source wrt 2>&1 | tee logs/source-check.log
+          [[ "$LOCK_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || { echo 'Invalid Release tag' >&2; exit 1; }
+          LOCK_DIR="$RUNNER_TEMP/wr30u-replay"
+          mkdir -p "$LOCK_DIR"
+          gh release download "$LOCK_TAG" --repo "$GITHUB_REPOSITORY" --pattern sources.lock.json --dir "$LOCK_DIR"
+          echo "WR30U_SOURCE_LOCK=$LOCK_DIR/sources.lock.json" >> "$GITHUB_ENV"
+      - name: Fetch source selected by Config/sources.json or lock
+        run: python3 Scripts/sources.py fetch wrt 2>&1 | tee logs/source-check.log
       - name: Update matching feeds and selected applications
         run: |
-          (cd wrt && ./scripts/feeds update -a) 2>&1 | tee logs/feeds-update.log
-          (cd wrt && ./scripts/feeds install -a) 2>&1 | tee logs/feeds-install.log
+          python3 Scripts/sources.py feeds wrt 2>&1 | tee logs/feeds.log
           bash Scripts/packages.sh wrt 2>&1 | tee logs/packages.log
-          for feed in wrt/feeds/*; do
-            if [ -e "$feed/.git" ]; then
-              printf 'feed_%s=%s\n' "${feed##*/}" "$(git -C "$feed" rev-parse HEAD)"
-            fi
-          done >> output/source-lock.txt
+          python3 Scripts/sources.py record wrt 2>&1 | tee logs/source-lock.log
       - name: Resolve configuration and check WR30U Vendor policy
         run: |
           python3 Scripts/recipe.py compose wrt > wrt/.config
           cp wrt/.config output/requested.config
           status=0
           make -C wrt defconfig 2>&1 | tee logs/defconfig.log || status=$?
-          # Save evidence BEFORE running any assertion, also on failure.
           test ! -f wrt/.config || cp wrt/.config output/resolved.config
           test ! -f wrt/tmp/.packageinfo || cp wrt/tmp/.packageinfo output/packageinfo.txt
           if [ "$status" -ne 0 ]; then exit "$status"; fi
           (cd wrt && ./scripts/diffconfig.sh) > output/diffconfig.txt
-          python3 Scripts/recipe.py config wrt 2>&1 | tee logs/config-check.log
+          python3 Scripts/sources.py verify wrt 2>&1 | tee logs/config-check.log
           git -C wrt diff --exit-code -- target/linux package/kernel package/mtk \
             include config scripts feeds.conf.default
       - name: Cache compiler objects only
         if: ${{ !inputs.TEST }}
-        uses: actions/cache@v6.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: wrt/.ccache
-          key: wr30u-vendor-u24-${{ hashFiles('Config/**', 'Scripts/**') }}-${{ env.SOURCE_SHA }}
+          key: wr30u-u24-${{ hashFiles('Config/**', 'Scripts/**') }}-${{ env.SOURCE_SHA }}
           restore-keys: |
-            wr30u-vendor-u24-${{ hashFiles('Config/**', 'Scripts/**') }}-
+            wr30u-u24-${{ hashFiles('Config/**', 'Scripts/**') }}-
       - name: Download package sources
         if: ${{ !inputs.TEST }}
-        run: |
-          make -C wrt download -j"$(nproc)" 2>&1 | tee logs/download.log
-      - name: Compile firmware (one manual request)
+        run: make -C wrt download -j"$(nproc)" 2>&1 | tee logs/download.log
+      - name: Compile firmware
         if: ${{ !inputs.TEST }}
         run: |
           make -C wrt -j"$(nproc)" 2>&1 | tee logs/build.log || \
             make -C wrt -j1 V=s 2>&1 | tee logs/build-retry.log
-      - name: Check and collect WR30U firmware
+      - name: Check firmware and prepare traceable release bundle
         if: ${{ !inputs.TEST }}
         run: |
-          python3 Scripts/recipe.py config wrt
+          python3 Scripts/sources.py verify wrt
           git -C wrt diff --exit-code -- target/linux package/kernel package/mtk \
             include config scripts feeds.conf.default
           python3 Scripts/recipe.py collect wrt --output output
-      - name: Prepare release metadata
+          python3 Scripts/release.py pack --output output
+      - name: Preserve firmware before attempting any publication
         if: ${{ !inputs.TEST }}
-        run: |
-          RELEASE_DATE="$(TZ=Asia/Shanghai date +'%Y.%m.%d-%H%M%S')"
-          RELEASE_TITLE_DATE="$(TZ=Asia/Shanghai date +'%Y-%m-%d %H:%M')"
-          echo "RELEASE_TAG=WR30U-$RELEASE_DATE" >> "$GITHUB_ENV"
-          echo "RELEASE_NAME=WR30U MTK Vendor · $RELEASE_TITLE_DATE" >> "$GITHUB_ENV"
-
-          MANIFEST="$(find output -maxdepth 1 -type f -name '*.manifest' -print -quit)"
-          KERNEL="$(awk '$1=="kernel" && $2=="-" {print $3; exit}' "$MANIFEST")"
-          {
-            echo "## Xiaomi WR30U · MTK Vendor Wi-Fi"
-            echo
-            echo "- 设备：Xiaomi WR30U stock"
-            echo "- 无线：MTK Vendor mt_wifi / MT7981"
-            echo "- 源码：padavanonly/immortalwrt-mt798x-6.6"
-            echo "- 分支：$SOURCE_BRANCH"
-            echo "- 源码提交：$SOURCE_SHA"
-            echo "- 配置提交：$GITHUB_SHA"
-            echo "- 内核：$KERNEL"
-            echo "- Actions Run：$GITHUB_RUN_ID"
-            echo
-            echo "### LuCI 应用 / 主题"
-            awk '$1 ~ /^luci-(app|theme)-/ {print "- " $1}' "$MANIFEST" | sort -u
-            echo
-            echo "### Firmware SHA256"
-            echo '```text'
-            cat output/firmware-sha256sums
-            echo '```'
-          } > output/RELEASE.md
-
-      - name: Publish firmware release
-        if: ${{ !inputs.TEST }}
-        uses: softprops/action-gh-release@v3.0.3
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_NAME }}
-          target_commitish: ${{ github.sha }}
-          body_path: output/RELEASE.md
-          make_latest: true
-          fail_on_unmatched_files: true
-          files: |
-            output/*-sysupgrade.bin
-            output/*.manifest
-            output/firmware-sha256sums
-            output/*.buildinfo
-
-      - name: Keep only the latest 3 releases
-        if: ${{ !inputs.TEST }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mapfile -t OLD_TAGS < <(
-            gh release list --repo "$GITHUB_REPOSITORY" --limit 100 \
-              --json tagName,publishedAt \
-              --jq 'sort_by(.publishedAt) | reverse | .[3:] | .[].tagName'
-          )
-          for TAG in "${OLD_TAGS[@]}"; do
-            [ -n "$TAG" ] || continue
-            echo "Deleting old release and tag: $TAG"
-            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
-          done
-
-      - name: Upload results and diagnostics
+          name: wr30u-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/release/
+          if-no-files-found: error
+          compression-level: 1
+          retention-days: 7
+      - name: Upload diagnostics
         if: ${{ always() }}
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: wr30u-vendor-${{ github.run_id }}-${{ github.run_attempt }}
+          name: wr30u-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            output/
             logs/
+            output/*.config
+            output/*.txt
+            output/*.json
+            output/*.patch
+            output/*.conf
           if-no-files-found: warn
           compression-level: 1
           retention-days: 7
+
+  release:
+    needs: build
+    # Explicit status condition also permits publish-only mode when build was skipped.
+    if: ${{ always() && !cancelled() && (inputs.MODE == 'publish' || (needs.build.result == 'success' && !inputs.TEST)) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Publish verified artifact and retain the latest three releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.MODE || 'build' }}
+          PUBLISH_RUN_ID: ${{ inputs.PUBLISH_RUN_ID }}
+        run: |
+          if [ "$MODE" != publish ]; then export PUBLISH_RUN_ID="$GITHUB_RUN_ID"; fi
+          python3 Scripts/release.py publish
