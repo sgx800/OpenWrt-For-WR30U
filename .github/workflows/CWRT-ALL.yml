@@ -34,7 +34,7 @@ jobs:
   preflight:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Static recipe tests
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Install build prerequisites
@@ -106,7 +106,7 @@ jobs:
             include config scripts feeds.conf.default
       - name: Cache compiler objects only
         if: ${{ !inputs.TEST }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: wrt/.ccache
           key: native-wr30u-ubuntu24-${{ hashFiles('Config/*.config', 'Scripts/**') }}-${{ env.SOURCE_SHA }}
@@ -130,7 +130,7 @@ jobs:
             include config scripts feeds.conf.default
       - name: Upload firmware or diagnostic files
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wr30u-native-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
