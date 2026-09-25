@@ -1,87 +1,72 @@
 #!/bin/bash
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 VIKINGYFY
 
-PKG_PATH="$GITHUB_WORKSPACE/wrt/package/"
-
-#预置HomeProxy数据
-if [ -d *"homeproxy"* ]; then
-	echo " "
-
-	HP_RULE="surge"
-	HP_PATH="homeproxy/root/etc/homeproxy"
-
-	rm -rf ./$HP_PATH/resources/*
-
-	git clone -q --depth=1 --single-branch --branch "release" "https://github.com/Loyalsoldier/surge-rules.git" ./$HP_RULE/
-	cd ./$HP_RULE/ && RES_VER=$(git log -1 --pretty=format:'%s' | grep -o "[0-9]*")
-
-	echo $RES_VER | tee china_ip4.ver china_ip6.ver china_list.ver gfw_list.ver
-	awk -F, '/^IP-CIDR,/{print $2 > "china_ip4.txt"} /^IP-CIDR6,/{print $2 > "china_ip6.txt"}' cncidr.txt
-	sed 's/^\.//g' direct.txt > china_list.txt ; sed 's/^\.//g' gfw.txt > gfw_list.txt
-	mv -f ./{china_*,gfw_list}.{ver,txt} ../$HP_PATH/resources/
-
-	cd .. && rm -rf ./$HP_RULE/
-
-	cd $PKG_PATH && echo "homeproxy date has been updated!"
-fi
+FEEDS_PATH="./feeds"
+PACKAGE_PATH="./package"
 
 #修改argon主题字体和颜色
-if [ -d *"luci-theme-argon"* ]; then
+if [ -d "$PACKAGE_PATH/luci-theme-argon" ]; then
 	echo " "
-
-	cd ./luci-theme-argon/
-
-	sed -i "s/primary '.*'/primary '#31a1a1'/; s/'0.2'/'0.5'/; s/'none'/'bing'/; s/'600'/'normal'/" ./luci-app-argon-config/root/etc/config/argon
-
-	cd $PKG_PATH && echo "theme-argon has been fixed!"
+	if sed -i "s/primary '.*'/primary '#31a1a1'/g; s/'0.2'/'0.5'/g; s/'none'/'bing'/g; s/'600'/'normal'/g" \
+		"$PACKAGE_PATH/luci-theme-argon/luci-app-argon-config/root/etc/config/argon"; then
+		echo "theme-argon has been fixed!"
+	else
+		echo "theme-argon fix failed; continuing!"
+	fi
 fi
 
-#修改qca-nss-drv启动顺序
-NSS_DRV="../feeds/nss_packages/qca-nss-drv/files/qca-nss-drv.init"
-if [ -f "$NSS_DRV" ]; then
+#修改aurora菜单式样
+if [ -d "$PACKAGE_PATH/luci-app-aurora-config" ]; then
 	echo " "
-
-	sed -i 's/START=.*/START=85/g' $NSS_DRV
-
-	cd $PKG_PATH && echo "qca-nss-drv has been fixed!"
+	if find "$PACKAGE_PATH/luci-app-aurora-config/root/usr/share/aurora/" -type f -name '*.template' -exec \
+		sed -i "s/nav_type '.*'/nav_type 'dropdown'/g; s/struct_radius_base '.*'/struct_radius_base '0.125rem'/g" {} +; then
+		echo "theme-aurora has been fixed!"
+	else
+		echo "theme-aurora fix failed; continuing!"
+	fi
 fi
 
-#修改qca-nss-pbuf启动顺序
-NSS_PBUF="./kernel/mac80211/files/qca-nss-pbuf.init"
-if [ -f "$NSS_PBUF" ]; then
+#修改mini-diskmanager菜单位置
+if [ -d "$PACKAGE_PATH/luci-app-mini-diskmanager" ]; then
 	echo " "
-
-	sed -i 's/START=.*/START=86/g' $NSS_PBUF
-
-	cd $PKG_PATH && echo "qca-nss-pbuf has been fixed!"
+	if sed -i "s/services/system/g" \
+		"$PACKAGE_PATH/luci-app-mini-diskmanager/luci-app-mini-diskmanager/root/usr/share/luci/menu.d/luci-app-mini-diskmanager.json"; then
+		echo "mini-diskmanager has been fixed!"
+	else
+		echo "mini-diskmanager fix failed; continuing!"
+	fi
 fi
 
-#修复TailScale配置文件冲突
-TS_FILE=$(find ../feeds/packages/ -maxdepth 3 -type f -wholename "*/tailscale/Makefile")
-if [ -f "$TS_FILE" ]; then
+#修改natmapt菜单位置
+if [ -d "$PACKAGE_PATH/luci-app-natmapt" ]; then
 	echo " "
+	if sed -i "s/network/services/g" \
+		"$PACKAGE_PATH/luci-app-natmapt/root/usr/share/luci/menu.d/luci-app-natmap.json"; then
+		echo "natmapt has been fixed!"
+	else
+		echo "natmapt fix failed; continuing!"
+	fi
+fi
 
-	sed -i '/\/files/d' $TS_FILE
-
-	cd $PKG_PATH && echo "tailscale has been fixed!"
+#修复QModem依赖循环
+if [ -d "$PACKAGE_PATH/QModem" ]; then
+	echo " "
+	if sed -i 's/@!PACKAGE_luci-app-qmodem //g; s/+luci-app-qmodem-next/luci-app-qmodem-next/g' \
+		"$PACKAGE_PATH/QModem/luci/luci-app-qmodem-next/Makefile"; then
+		echo "QModem has been fixed!"
+	else
+		echo "QModem fix failed; continuing!"
+	fi
 fi
 
 #修复Rust编译失败
-RUST_FILE=$(find ../feeds/packages/ -maxdepth 3 -type f -wholename "*/rust/Makefile")
-if [ -f "$RUST_FILE" ]; then
+if [ -d "$FEEDS_PATH/packages/lang/rust" ]; then
 	echo " "
-
-	sed -i 's/ci-llvm=true/ci-llvm=false/g' $RUST_FILE
-
-	cd $PKG_PATH && echo "rust has been fixed!"
-fi
-
-#修复DiskMan编译失败
-DM_FILE="./luci-app-diskman/applications/luci-app-diskman/Makefile"
-if [ -f "$DM_FILE" ]; then
-	echo " "
-
-	sed -i 's/fs-ntfs/fs-ntfs3/g' $DM_FILE
-	sed -i '/ntfs-3g-utils /d' $DM_FILE
-
-	cd $PKG_PATH && echo "diskman has been fixed!"
+	if sed -i 's/ci-llvm=true/ci-llvm=false/g' \
+		"$FEEDS_PATH/packages/lang/rust/Makefile"; then
+		echo "rust has been fixed!"
+	else
+		echo "rust fix failed; continuing!"
+	fi
 fi
