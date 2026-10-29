@@ -2,13 +2,19 @@
 
 本仓库独立维护 **Xiaomi WR30U stock 分区布局**的 OpenWrt 固件构建流程，无线使用 MT7981 的 MTK Vendor `mt_wifi`；不适用于 ubootmod。
 
-固件源码、分支及额外插件来源统一由 `Config/sources.json` 管理。当前固件源码为 `padavanonly/immortalwrt-mt798x-6.6` 的 `openwrt-24.10-6.6` 分支。当前构建流程由本仓库独立维护，不从原 Fork 仓库自动同步代码。
+固件源码、分支及额外插件来源统一由 `Config/sources.json` 管理。当前构建流程由本仓库独立维护，不从原项目仓库自动同步代码。
 
 ## 项目来源与致谢
 
 本项目最初 Fork 自 [VIKINGYFY/CloseWRT-CI](https://github.com/VIKINGYFY/CloseWRT-CI)，在其基础上针对 Xiaomi WR30U（stock 分区布局）独立调整和维护固件配置、插件选型及自动化构建流程。感谢 VIKINGYFY 和原项目贡献者提供的开源基础与参考。
 
 本仓库保留原项目的来源说明及适用的版权、许可证要求，详见 [LICENSE](LICENSE)。保留署名不代表当前构建依赖原项目仓库，也不意味着双方代码会自动同步。
+
+## 固件编译源码来源
+
+实际用于编译 WR30U 固件的上游源码仓库是 [padavanonly/immortalwrt-mt798x-6.6](https://github.com/padavanonly/immortalwrt-mt798x-6.6)，使用 `openwrt-24.10-6.6` 分支。该仓库提供 ImmortalWrt 基础源码及 MT7981 Vendor 驱动等组件；本仓库负责 WR30U stock 设备配置、插件选择与自动化构建。
+
+具体源码仓库及分支由 [`Config/sources.json`](Config/sources.json) 配置，每次构建使用的实际 Commit 记录在 Release 的 `sources.lock.json` 中。以上编译源码来源与最初参考的 `VIKINGYFY/CloseWRT-CI` 项目不同。
 
 ## 编译入口
 
