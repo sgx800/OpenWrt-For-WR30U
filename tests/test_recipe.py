@@ -144,7 +144,7 @@ class RecipeTests(unittest.TestCase):
         self.assertEqual(new['repository'], 'Tokisaki-Galaxy/luci-app-tailscale-community')
         self.assertEqual(new['path'], 'luci-app-tailscale-community')
         self.assertEqual(self.policy['CONFIG_PACKAGE_luci-app-tailscale-community'], 'y')
-        self.assertEqual(self.policy['CONFIG_PACKAGE_luci-app-tailscale'], 'n')
+        self.assertNotIn('CONFIG_PACKAGE_luci-app-tailscale', self.policy)
         requested = r.wanted_apps(self.policy)
         self.assertNotIn('luci-app-tailscale', requested)
         self.assertIn('luci-app-tailscale-community', requested)
