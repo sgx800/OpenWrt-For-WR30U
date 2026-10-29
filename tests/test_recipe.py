@@ -136,24 +136,22 @@ class RecipeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 r.collect(root, root / 'output', self.policy)
 
-    def test_tailscale_precise_ownership_patch(self):
-        with tempfile.TemporaryDirectory() as d:
-            root = Path(d)
-            p = root / 'feeds/packages/net/tailscale/Makefile'
-            p.parent.mkdir(parents=True)
-            for name in ('etc/init.d/tailscale', 'etc/config/tailscale'):
-                f = root / 'package/luci-app-tailscale/root' / name
-                f.parent.mkdir(parents=True, exist_ok=True)
-                f.write_text('fixture')
-            keep = '/etc/tailscale/\n\t$(INSTALL_BIN) $(GO_PKG_BUILD_BIN_DIR)/tailscaled $(1)/usr/sbin\n'
-            keep += '\t$(LN) tailscaled $(1)/usr/sbin/tailscale\n'
-            p.write_text('/etc/config/tailscale\n' + keep +
-                         '\t$(INSTALL_BIN) ./files//tailscale.init $(1)/etc/init.d/tailscale\n' +
-                         '\t$(INSTALL_DATA) ./files//tailscale.conf $(1)/etc/config/tailscale\n')
-            r.patch_tailscale(root)
-            self.assertEqual(p.read_text(), keep)
-            with self.assertRaises(ValueError):
-                r.patch_tailscale(root)
+    def test_tailscale_community_replaces_legacy_plugin(self):
+        packages = {item['name']: item for item in
+                    json.loads((ROOT / 'Config/sources.json').read_text())['extra_packages']}
+        self.assertNotIn('luci-app-tailscale', packages)
+        new = packages['luci-app-tailscale-community']
+        self.assertEqual(new['repository'], 'Tokisaki-Galaxy/luci-app-tailscale-community')
+        self.assertEqual(new['path'], 'luci-app-tailscale-community')
+        self.assertEqual(self.policy['CONFIG_PACKAGE_luci-app-tailscale-community'], 'y')
+        self.assertEqual(self.policy['CONFIG_PACKAGE_luci-app-tailscale'], 'n')
+        requested = r.wanted_apps(self.policy)
+        self.assertNotIn('luci-app-tailscale', requested)
+        self.assertIn('luci-app-tailscale-community', requested)
+        with self.assertRaisesRegex(ValueError, 'extra='):
+            r.check_apps(requested | {'luci-app-tailscale'}, requested)
+        self.assertNotIn('patch_tailscale', (ROOT / 'Scripts/recipe.py').read_text())
+        self.assertNotIn('recipe.py" tailscale', (ROOT / 'Scripts/packages.sh').read_text())
 
     def test_external_sources_are_only_selected_packages(self):
         plan = r.package_plan(ROOT).splitlines()

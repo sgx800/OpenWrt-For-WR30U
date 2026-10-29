@@ -184,24 +184,6 @@ def check_source(root: Path) -> None:
     print('Source has WR30U stock and the MT7981 mt_wifi Vendor backend')
 
 
-def patch_tailscale(root: Path) -> None:
-    """Only remove duplicate ownership; retain feed daemon/CLI and other rules."""
-    path = root / 'feeds/packages/net/tailscale/Makefile'
-    lines = path.read_text().splitlines(keepends=True)
-    remove = []
-    for relative in ('etc/init.d/tailscale', 'etc/config/tailscale'):
-        if not (root / 'package/luci-app-tailscale/root' / relative).is_file():
-            raise ValueError('Custom Tailscale plugin does not supply ' + relative)
-        matches = [s for s in lines if re.search(r'\$\(INSTALL_(?:BIN|DATA)\)', s)
-                   and './files/' in s and '/' + relative in s]
-        if len(matches) != 1:
-            raise ValueError('Tailscale layout changed; review duplicate ownership: ' + relative)
-        remove.extend(matches)
-    remove.extend(s for s in lines if s.strip() == '/etc/config/tailscale')
-    path.write_text(''.join(s for s in lines if s not in remove))
-    print('Tailscale: only duplicate init/config install rules and conffile ownership removed')
-
-
 def check_manifest(text: str, policy: dict[str, str],
                    deps: dict[str, set[str]] | None = None) -> None:
     packages = {s.split()[0] for s in text.splitlines() if s.strip()}
@@ -253,7 +235,7 @@ def package_plan(recipe: Path) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['compose', 'plan', 'source', 'config', 'tailscale', 'collect'])
+    parser.add_argument('command', choices=['compose', 'plan', 'source', 'config', 'collect'])
     parser.add_argument('root', type=Path)
     parser.add_argument('--recipe', type=Path, default=Path(__file__).resolve().parents[1])
     parser.add_argument('--output', type=Path, default=Path('output'))
@@ -264,8 +246,6 @@ def main() -> None:
         print(package_plan(args.recipe), end='')
     elif args.command == 'source':
         check_source(args.root)
-    elif args.command == 'tailscale':
-        patch_tailscale(args.root)
     else:
         policy = parse((args.recipe / 'Config/plugins.config').read_text())
         if args.command == 'config':

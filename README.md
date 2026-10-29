@@ -58,6 +58,12 @@ LICENSE
 
 WR30U 默认 mt76 组件通过设备包排除规则移出最终 rootfs；最终 manifest 必须包含 Vendor 组件且不得包含被禁止的 mt76/其他无线驱动。
 
+## Tailscale LuCI 管理界面
+
+使用 [luci-app-tailscale-community](https://github.com/Tokisaki-Galaxy/luci-app-tailscale-community) 代替旧版 `luci-app-tailscale`。来源固定到已选择的上游提交；插件位于仓库的 `luci-app-tailscale-community/` 子目录。Tailscale 守护进程及 `/etc/init.d/tailscale`、`/etc/config/tailscale` 由固件原生 feeds 中的 `tailscale` 包提供，不再使用旧插件的覆盖和安装补丁。
+
+**从旧固件保留配置升级时：** 先备份 `/etc/config/tailscale`、`/etc/tailscale/` 和现有网络、防火墙规则。旧插件的 `enabled`、`config_path`、`accept_dns`、`disable_snat_subnet_routes` 等设置并不与社区版的 `service_enabled`、`state_file`、`dns_mode`、`nosnat` 一一兼容。升级后检查 Tailscale 服务启停、登录状态、DNS、路由以及网络/防火墙策略，并在社区版 LuCI 中重新确认配置。不要假设旧插件的运行行为会自动迁移。
+
 ## 本地检查
 
 ```bash
