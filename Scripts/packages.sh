@@ -37,4 +37,3 @@ while IFS=$'\t' read -r name repo ref subdir; do
   cp -a "$dest/$subdir/." "$ROOT/package/$name/"
   rm -rf -- "$ROOT/package/$name/.git"
 done < "$STAGE/plan.tsv"
-python3 "$RECIPE/Scripts/recipe.py" tailscale "$ROOT"
