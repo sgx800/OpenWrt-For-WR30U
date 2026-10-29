@@ -1,8 +1,7 @@
 {
   "firmware": {
     "repository": "padavanonly/immortalwrt-mt798x-6.6",
-    "branch": "openwrt-24.10-6.6",
-    "reviewed_commit": "ec9ef10efc65da1e6d1de4e2c043c0e13d08eed8"
+    "branch": "openwrt-24.10-6.6"
   },
   "extra_packages": [
     {"name":"luci-theme-aurora", "repository":"eamonxg/luci-theme-aurora", "ref":"master", "path":"."},
