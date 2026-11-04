@@ -11,22 +11,29 @@ mkdir -p "$RECIPE/output"
 LOG="$RECIPE/output/extra-package-sources.txt"
 : > "$LOG"
 python3 "$RECIPE/Scripts/sources.py" plan "$ROOT" > "$STAGE/plan.tsv"
+# Shared repository/ref entries must resolve to a single commit per build.
+declare -A source_checkouts=()
 for app in homeproxy autoreboot upnp; do
   [[ -f "$ROOT/feeds/luci/applications/luci-app-$app/Makefile" ]] || {
     echo "Required matching-feed package missing: luci-app-$app" >&2; exit 1;
   }
 done
 while IFS=$'\t' read -r name repo ref subdir; do
-  dest="$STAGE/$name"
-  git init -q "$dest"
-  git -C "$dest" remote add origin "https://github.com/$repo.git"
-  fetched=false
-  for attempt in 1 2 3; do
-    if git -C "$dest" fetch -q --depth=1 origin "$ref"; then fetched=true; break; fi
-    sleep "$attempt"
-  done
-  "$fetched" || { echo "Cannot fetch $repo at $ref" >&2; exit 1; }
-  git -C "$dest" checkout -q --detach FETCH_HEAD
+  source_key="$repo@$ref"
+  dest="${source_checkouts[$source_key]-}"
+  if [[ -z "$dest" ]]; then
+    dest="$STAGE/$name"
+    git init -q "$dest"
+    git -C "$dest" remote add origin "https://github.com/$repo.git"
+    fetched=false
+    for attempt in 1 2 3; do
+      if git -C "$dest" fetch -q --depth=1 origin "$ref"; then fetched=true; break; fi
+      sleep "$attempt"
+    done
+    "$fetched" || { echo "Cannot fetch $repo at $ref" >&2; exit 1; }
+    git -C "$dest" checkout -q --detach FETCH_HEAD
+    source_checkouts[$source_key]="$dest"
+  fi
   printf '%s %s %s %s\n' "$name" "$repo" "$ref" "$(git -C "$dest" rev-parse HEAD)" | tee -a "$LOG"
   [[ -f "$dest/$subdir/Makefile" ]] || { echo "Missing package Makefile: $name" >&2; exit 1; }
   # Stage first, then remove exact-name duplicates and stale feed links.

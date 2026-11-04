@@ -60,15 +60,17 @@ LICENSE
 
 ## 当前应用
 
-保留 HomeProxy、自动重启、WeChatPush、Tailscale、UPnP、WOLPlus、ttyd、Vantage 主题，以及 MTK Vendor 配套的 mtwifi-cfg、TurboACC-mtk、EQoS-mtk。
+保留 HomeProxy、自动重启、WeChatPush、Tailscale、UPnP、WOLPlus、ttyd、Vantage 主题与仪表盘，以及 MTK Vendor 配套的 mtwifi-cfg、TurboACC-mtk、EQoS-mtk。
 
 WR30U 默认 mt76 组件通过设备包排除规则移出最终 rootfs；最终 manifest 必须包含 Vendor 组件且不得包含被禁止的 mt76/其他无线驱动。
 
-## LuCI 主题
+## LuCI 主题与仪表盘
 
-使用 [anothaDev/luci-theme-vantage](https://github.com/anothaDev/luci-theme-vantage) 的 `luci-theme-vantage` 取代 Aurora 主题及其设置插件（`luci-theme-aurora`、`luci-app-aurora-config`）。主题通过 `Config/sources.json` 引入，`Config/plugins.config` 中设为 `y`，**直接编译进固件**，不需要另外安装软件包。
+从 [anothaDev/luci-theme-vantage](https://github.com/anothaDev/luci-theme-vantage) 同时引入 `luci-theme-vantage`（主题）和 `luci-app-vantage`（实时网络仪表盘），取代 Aurora 主题及其设置插件（`luci-theme-aurora`、`luci-app-aurora-config`）。两者均在 `Config/plugins.config` 中设为 `y`，**直接编译进固件**，无需在路由器上额外安装。仪表盘增加 LuCI 的 `admin/dashboard` 入口，登录后可作为首页。
 
-当前跟随上游 `main` 分支，每次完整编译获取当时最新源码；实际提交记录在 Release 的 `sources.lock.json`。仅引入 Vantage 主题，**未添加独立的 `luci-app-vantage` 仪表盘**。上游支持 OpenWrt 24.10，但 WR30U 的 MTK Vendor 专用页面仍需实机验证。
+两者都使用同一上游仓库的 `main` 分支，并在一次构建中复用相同源码提交；实际 Commit 记录在 Release 的 `sources.lock.json`。上游支持 OpenWrt 24.10，但 WR30U 的 MTK Vendor 无线客户端数据和特有 LuCI 页面仍需实机验证。
+
+仪表盘的必需依赖由其上游 Makefile 声明，`make defconfig` 自动选择：`luci-base`、`rpcd`、`rpcd-mod-iwinfo`、`rpcd-mod-ucode`、`ucode-mod-uci`、`ucode-mod-ubus`、`ucode-mod-fs` 和 `ucode-mod-rtnl`。可选增强包括 `rpcd-mod-rrdns`（反向 DNS 名称）和 `umdns`（mDNS 名称），不强制安装。上游已对部分不提供标准 `network.wireless` 状态的 MediaTek Vendor 驱动提供 `/etc/config/wireless` 回退读取，但不能保证所有无线状态字段正常。
 
 Vantage 自带 `uci-defaults` 脚本用于注册和选择主题。保留旧配置升级固件后，应在 LuCI 的“系统 → 系统 → 语言和界面”确认当前主题；如果出现显示问题，可切回 Bootstrap 主题。
 
