@@ -153,9 +153,30 @@ class RecipeTests(unittest.TestCase):
         self.assertNotIn('patch_tailscale', (ROOT / 'Scripts/recipe.py').read_text())
         self.assertNotIn('recipe.py" tailscale', (ROOT / 'Scripts/packages.sh').read_text())
 
+    def test_vantage_theme_replaces_aurora(self):
+        packages = {item['name']: item for item in
+                    json.loads((ROOT / 'Config/sources.json').read_text())['extra_packages']}
+        self.assertNotIn('luci-theme-aurora', packages)
+        self.assertNotIn('luci-app-aurora-config', packages)
+        self.assertEqual(packages['luci-theme-vantage'], {
+            'name': 'luci-theme-vantage',
+            'repository': 'anothaDev/luci-theme-vantage',
+            'ref': 'main',
+            'path': 'luci-theme-vantage',
+        })
+        self.assertEqual(self.policy['CONFIG_PACKAGE_luci-theme-vantage'], 'y')
+        for legacy in ('luci-theme-aurora', 'luci-app-aurora-config'):
+            self.assertNotIn('CONFIG_PACKAGE_' + legacy, self.policy)
+        self.assertNotIn('CONFIG_PACKAGE_luci-app-vantage', self.policy)
+        requested = r.wanted_apps(self.policy)
+        self.assertIn('luci-theme-vantage', requested)
+        self.assertNotIn('luci-app-vantage', requested)
+        with self.assertRaisesRegex(ValueError, 'extra='):
+            r.check_apps(requested | {'luci-theme-aurora'}, requested)
+
     def test_external_sources_are_only_selected_packages(self):
         plan = r.package_plan(ROOT).splitlines()
-        self.assertEqual(len(plan), 5)
+        self.assertEqual(len(plan), 4)
         names = {line.split('\t')[0] for line in plan}
         self.assertTrue(names <= r.wanted_apps(self.policy))
         self.assertIn('luci-app-wolplus', names)

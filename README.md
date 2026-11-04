@@ -60,9 +60,17 @@ LICENSE
 
 ## 当前应用
 
-保留 HomeProxy、自动重启、WeChatPush、Tailscale、UPnP、WOLPlus、ttyd、Aurora 及其设置，以及 MTK Vendor 配套的 mtwifi-cfg、TurboACC-mtk、EQoS-mtk。
+保留 HomeProxy、自动重启、WeChatPush、Tailscale、UPnP、WOLPlus、ttyd、Vantage 主题，以及 MTK Vendor 配套的 mtwifi-cfg、TurboACC-mtk、EQoS-mtk。
 
 WR30U 默认 mt76 组件通过设备包排除规则移出最终 rootfs；最终 manifest 必须包含 Vendor 组件且不得包含被禁止的 mt76/其他无线驱动。
+
+## LuCI 主题
+
+使用 [anothaDev/luci-theme-vantage](https://github.com/anothaDev/luci-theme-vantage) 的 `luci-theme-vantage` 取代 Aurora 主题及其设置插件（`luci-theme-aurora`、`luci-app-aurora-config`）。主题通过 `Config/sources.json` 引入，`Config/plugins.config` 中设为 `y`，**直接编译进固件**，不需要另外安装软件包。
+
+当前跟随上游 `main` 分支，每次完整编译获取当时最新源码；实际提交记录在 Release 的 `sources.lock.json`。仅引入 Vantage 主题，**未添加独立的 `luci-app-vantage` 仪表盘**。上游支持 OpenWrt 24.10，但 WR30U 的 MTK Vendor 专用页面仍需实机验证。
+
+Vantage 自带 `uci-defaults` 脚本用于注册和选择主题。保留旧配置升级固件后，应在 LuCI 的“系统 → 系统 → 语言和界面”确认当前主题；如果出现显示问题，可切回 Bootstrap 主题。
 
 ## Tailscale LuCI 管理界面
 
