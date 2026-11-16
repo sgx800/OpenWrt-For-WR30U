@@ -1,85 +1,28 @@
 # WR30U · MTK Vendor Wi-Fi
 
-本仓库独立维护 **Xiaomi WR30U**的 OpenWrt 固件构建流程，无线使用 MT7981 的 MTK Vendor `mt_wifi`。
+基于 [padavanonly/immortalwrt-mt798x-6.6](https://github.com/padavanonly/immortalwrt-mt798x-6.6)（`openwrt-24.10-6.6`）构建，适用于 **小米 WR30U 原厂 stock 分区**，使用 MT7981 MTK Vendor `mt_wifi` 驱动。**不适用于 ubootmod。**
 
-实际用于编译 WR30U 固件的上游源码仓库是 [padavanonly/immortalwrt-mt798x-6.6](https://github.com/padavanonly/immortalwrt-mt798x-6.6)，使用 `openwrt-24.10-6.6` 分支。该仓库提供 ImmortalWrt 基础源码及 MT7981 Vendor 驱动等组件。
+## 编译与下载
 
-## 项目来源与致谢
+通过 [GitHub Actions · WR30U](https://github.com/sgx800/OpenWrt-For-WR30U/actions/workflows/WR30U.yml) 构建：
 
-本项目最初 Fork 自 [VIKINGYFY/CloseWRT-CI](https://github.com/VIKINGYFY/CloseWRT-CI)，在其基础上针对 Xiaomi WR30U（stock 分区布局）独立调整和维护固件配置、插件选型及自动化构建流程。感谢 VIKINGYFY 和原项目贡献者提供的开源基础与参考。
+| 模式 | 操作 |
+| --- | --- |
+| 定时编译 | 每周一北京时间 05:00 |
+| 手动完整编译 | `MODE=build`，取消勾选 `TEST`（默认勾选时仅检查配置） |
+| 发布已有产物 | `MODE=publish`，填写成功构建的 `PUBLISH_RUN_ID` |
+| 重现历史源码 | `MODE=build`，填写 `SOURCE_LOCK_TAG`（Release Tag） |
 
-本仓库保留原项目的来源说明及适用的版权、许可证要求，详见 [LICENSE](LICENSE)。保留署名不代表当前构建依赖原项目仓库，也不意味着双方代码会自动同步。
+固件及源码锁定记录见 [Releases](https://github.com/sgx800/OpenWrt-For-WR30U/releases)，仅保留最近 3 个 Release。
 
-## 编译入口
+## 配置
 
-Actions → **WR30U**。
+- [`Config/sources.json`](Config/sources.json)：固件源码、分支及外部插件来源。
+- [`Config/MTK.config`](Config/MTK.config) / [`Config/WR30U.config`](Config/WR30U.config)：MTK Vendor 与 WR30U 设备配置。
+- [`Config/plugins.config`](Config/plugins.config)：固件内置应用，包括 Vantage 主题与仪表盘、HomeProxy、Tailscale、WeChatPush、WOLPlus 等。
 
-- **定时编译**：每周一北京时间 05:00 自动完整编译（cron `0 21 * * 0`）。
-- **手动 build**：`MODE=build`。默认 `TEST=true` 只解析和验证配置；取消 TEST 才完整编译。
-- **手动 publish**：`MODE=publish`，填写 `PUBLISH_RUN_ID`，只发布指定成功 build 已保存的验证产物，不重新编译，也不先清理历史 Run。
-- **源码重现**：build 模式可填写 `SOURCE_LOCK_TAG`，从指定 Release 读取 `sources.lock.json`，按已记录的源码/feed/插件提交重现输入。
+## 项目来源
 
-没有 push、PR 或 workflow_run 自动编译入口。
+本项目最初 Fork 自 [VIKINGYFY/CloseWRT-CI](https://github.com/VIKINGYFY/CloseWRT-CI)，现独立维护。原项目版权与许可声明见 [LICENSE](LICENSE)。
 
-## 构建、发布与清理
-
-正常完整构建流程：
-
-```text
-cleanup → build → release
-```
-
-- `cleanup`：删除所有已完成的历史 Workflow Runs；不删除 Release/tag。
-- `build`：读取 `Config/sources.json`，记录固件源码、feeds、外部插件 SHA 与兼容补丁，校验最终 WR30U manifest。
-- `release`：从已上传的 `wr30u-release-<run>-<attempt>` Artifact 重新校验产物后发布。
-- Release **只保留最近 3 个**，确认新 Release 发布且远端附件校验通过后才删除更旧 Release 和 tag。
-- 发布失败不会自动重编固件，可使用 publish 模式重试已有成功 build。
-
-Release 除固件外还保存 `sources.lock.json`、最终配置、buildinfo、SHA256 以及 `traceability.tar.gz`，因此 Workflow Run 被清理后仍可追溯对应构建输入。
-
-## 项目结构
-
-```text
-.github/workflows/WR30U.yml  定时/手动入口、清理、编译、发布
-Config/MTK.config           MTK Vendor、HNAT/WARP 及配套配置
-Config/WR30U.config         WR30U stock 与 MT7981 设备配置
-Config/plugins.config       明确批准的应用和主题
-Config/sources.json         固件源码及外部插件来源
-Scripts/packages.sh         导入指定外部应用
-Scripts/recipe.py           Kconfig、设备、manifest 校验
-Scripts/sources.py          来源选择、锁定、重现和记录
-Scripts/release.py          Release bundle 校验、发布和保留策略
-tests/                      离线回归测试
-README.md
-LICENSE
-.gitattributes
-.gitignore
-```
-
-配置按 **MTK → WR30U → plugins** 合并，再交给 OpenWrt `make defconfig` 解析。新的 LuCI 应用不会仅因为成为依赖就自动获准；需要在 `Config/plugins.config` 明确选择。
-
-## 当前应用
-
-保留 HomeProxy、自动重启、WeChatPush、Tailscale、UPnP、WOLPlus、ttyd、Vantage 主题与仪表盘，以及 MTK Vendor 配套的 mtwifi-cfg、TurboACC-mtk、EQoS-mtk。
-
-WR30U 默认 mt76 组件通过设备包排除规则移出最终 rootfs；最终 manifest 必须包含 Vendor 组件且不得包含被禁止的 mt76/其他无线驱动。
-
-## LuCI 主题与仪表盘
-
-从 [anothaDev/luci-theme-vantage](https://github.com/anothaDev/luci-theme-vantage) 同时引入 `luci-theme-vantage`（主题）和 `luci-app-vantage`（实时网络仪表盘），取代 Aurora 主题及其设置插件（`luci-theme-aurora`、`luci-app-aurora-config`）。两者均在 `Config/plugins.config` 中设为 `y`，**直接编译进固件**，无需在路由器上额外安装。仪表盘增加 LuCI 的 `admin/dashboard` 入口，登录后可作为首页。
-
-两者都使用同一上游仓库的 `main` 分支，并在一次构建中复用相同源码提交；实际 Commit 记录在 Release 的 `sources.lock.json`。上游支持 OpenWrt 24.10，但 WR30U 的 MTK Vendor 无线客户端数据和特有 LuCI 页面仍需实机验证。
-
-仪表盘的必需依赖由其上游 Makefile 声明，`make defconfig` 自动选择：`luci-base`、`rpcd`、`rpcd-mod-iwinfo`、`rpcd-mod-ucode`、`ucode-mod-uci`、`ucode-mod-ubus`、`ucode-mod-fs` 和 `ucode-mod-rtnl`。可选增强包括 `rpcd-mod-rrdns`（反向 DNS 名称）和 `umdns`（mDNS 名称），不强制安装。上游已对部分不提供标准 `network.wireless` 状态的 MediaTek Vendor 驱动提供 `/etc/config/wireless` 回退读取，但不能保证所有无线状态字段正常。
-
-Vantage 自带 `uci-defaults` 脚本用于注册和选择主题。保留旧配置升级固件后，应在 LuCI 的“系统 → 系统 → 语言和界面”确认当前主题；如果出现显示问题，可切回 Bootstrap 主题。
-
-## 本地检查
-
-```bash
-bash -n Scripts/packages.sh
-python3 -m unittest discover -s tests -v
-python3 Scripts/recipe.py compose . > /tmp/wr30u-requested.config
-```
-
-静态检查不能替代完整编译和真机测试。管理地址、主机名及无线默认值跟随所选源码。刷写前核对 stock 分区与升级兼容性并做好备份。
+刷写前请确认设备为原厂分区布局，并备份配置。
